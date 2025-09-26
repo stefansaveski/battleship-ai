@@ -2,7 +2,7 @@ import pygame
 import random
 
 # Import utility modules
-from game_utils import generate_ships, is_valid_placement, get_grid_pos, is_hit, all_ships_sunk, create_board, can_place_ship, mark_ship_positions, target_shot, player_ships_flat, reset_game
+from game_utils import generate_ships, is_valid_placement, get_grid_pos, is_hit, all_ships_sunk, create_board, can_place_ship, mark_ship_positions, target_shot, enhanced_target_shot_multi_ship
 from graphics_utils import draw_grid, draw_hits_misses, draw_statistics
 
 pygame.init()
@@ -55,6 +55,25 @@ ai_wins = 0
 total_ai_shots = 0
 ai_shot_counts = []
 
+def reset_game():
+    """Reset the game state for a new game"""
+    global player_ships, enemy_ships, player_hits, player_misses
+    global enemy_hits, enemy_misses, occupied, current_hits, mode
+    global player_turn, game_over, winner
+    
+    player_ships = generate_ships()
+    enemy_ships = generate_ships()
+    player_hits = set()
+    player_misses = set()
+    enemy_hits = set()
+    enemy_misses = set()
+    occupied = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    current_hits = []
+    mode = "hunt"
+    player_turn = True
+    game_over = False
+    winner = None
+
 
 def ai_turn(ships, occupied, current_hits, enemy_hits, enemy_misses):
     """Perform AI turn"""
@@ -98,10 +117,13 @@ def ai_turn(ships, occupied, current_hits, enemy_hits, enemy_misses):
                 if shot is not None:
                     break
     else:
-        # Target mode: try to finish off the ship
-        shot = target_shot(current_hits, occupied)
+        # Target mode: try to finish off the ship using enhanced targeting for multiple ships
+        shot, updated_current_hits = enhanced_target_shot_multi_ship(current_hits, occupied, enemy_hits, enemy_misses, player_ships)
+        current_hits[:] = updated_current_hits  # Update the list in place
+        
         if shot is None:
-            # No valid target shots, clear current hits and go back to hunt
+            # No valid target shots remaining (all neighbors tried), clear current hits and go back to hunt
+            print(f"Heatmap multi-ship target mode complete: all neighbors of remaining unsunk ships have been tried, switching to hunt mode")
             current_hits.clear()
             mode = "hunt"
             return ai_turn(ships, occupied, current_hits, enemy_hits, enemy_misses)
@@ -129,9 +151,10 @@ def ai_turn(ships, occupied, current_hits, enemy_hits, enemy_misses):
             if (r, c) in ship:
                 ship_sunk = all(coord in enemy_hits for coord in ship)
                 if ship_sunk:
-                    # Ship is sunk, clear current hits and go back to hunt
-                    current_hits.clear()
-                    mode = "hunt"
+                    # Ship is sunk, but don't clear current_hits yet
+                    # The enhanced_target_shot_multi_ship function will filter out hits from sunk ships
+                    print(f"Ship sunk! But continuing target mode to check for adjacent unsunk ships. Current hits: {current_hits}")
+                    # Stay in target mode - let the multi-ship targeting handle the cleanup
                 break
     else:
         enemy_misses.add((r, c))

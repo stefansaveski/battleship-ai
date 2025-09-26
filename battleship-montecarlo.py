@@ -2,7 +2,7 @@ import pygame
 import random
 
 # Import utility modules
-from game_utils import generate_ships, is_valid_placement, get_grid_pos, is_hit, all_ships_sunk, create_board, can_place_ship, mark_ship_positions, target_shot, player_ships_flat, reset_game
+from game_utils import generate_ships, is_valid_placement, get_grid_pos, is_hit, all_ships_sunk, create_board, can_place_ship, mark_ship_positions, target_shot, enhanced_target_shot_multi_ship
 from graphics_utils import draw_grid, draw_hits_misses, draw_statistics
 from statistics_utils import create_statistics_globals, reset_game_state, update_statistics
 
@@ -76,11 +76,14 @@ def monte_carlo_ai_turn(occupied, current_hits, enemy_hits, enemy_misses, simula
     
     # If in target mode, prioritize adjacent shots to current hits
     if mode == "target":
-        shot = target_shot(current_hits, occupied)
+        shot, updated_current_hits = enhanced_target_shot_multi_ship(current_hits, occupied, enemy_hits, enemy_misses, player_ships)
+        current_hits[:] = updated_current_hits  # Update the list in place
+        
         if shot is not None:
             return execute_shot(shot[0], shot[1])
         else:
-            # No valid target shots, clear current hits and go back to hunt
+            # No valid target shots remaining (all neighbors tried), clear current hits and go back to hunt
+            print(f"Monte Carlo multi-ship target mode complete: all neighbors of remaining unsunk ships have been tried, switching to hunt mode")
             current_hits.clear()
             mode = "hunt"
     
@@ -245,9 +248,10 @@ def execute_shot(r, c):
             if (r, c) in ship:
                 ship_sunk = all(coord in enemy_hits for coord in ship)
                 if ship_sunk:
-                    # Ship is sunk, clear current hits and go back to hunt
-                    current_hits.clear()
-                    mode = "hunt"
+                    # Ship is sunk, but don't clear current_hits yet
+                    # The enhanced_target_shot_multi_ship function will filter out hits from sunk ships
+                    print(f"Monte Carlo: Ship sunk! But continuing target mode to check for adjacent unsunk ships. Current hits: {current_hits}")
+                    # Stay in target mode - let the multi-ship targeting handle the cleanup
                 break
     else:
         enemy_misses.add((r, c))

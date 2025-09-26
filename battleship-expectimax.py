@@ -1,6 +1,6 @@
 import pygame
 import random
-from game_utils import generate_ships, is_valid_placement, get_grid_pos, is_hit, all_ships_sunk, create_board, can_place_ship, mark_ship_positions, target_shot, player_ships_flat, reset_game
+from game_utils import generate_ships, is_valid_placement, get_grid_pos, is_hit, all_ships_sunk, target_shot, enhanced_target_shot_multi_ship, create_board, can_place_ship, mark_ship_positions
 from graphics_utils import draw_grid, draw_hits_misses, draw_statistics
 from statistics_utils import reset_game_state, update_statistics
 
@@ -164,8 +164,12 @@ def ai_turn(ships, occupied, current_hits, enemy_hits, enemy_misses):
         mode = "target"
 
     if mode == "target":
-        shot = target_shot(current_hits, occupied)
+        shot, updated_current_hits = enhanced_target_shot_multi_ship(current_hits, occupied, enemy_hits, enemy_misses, player_ships)
+        current_hits[:] = updated_current_hits  # Update the list in place
+        
         if shot is None:
+            # No valid target shots remaining (all neighbors tried), clear current hits and go back to hunt
+            print(f"Expectimax multi-ship target mode complete: all neighbors of remaining unsunk ships have been tried, switching to hunt mode")
             current_hits.clear()
             mode = "hunt"
         else:
@@ -174,7 +178,10 @@ def ai_turn(ships, occupied, current_hits, enemy_hits, enemy_misses):
                 enemy_hits.add((r,c)); current_hits.append((r,c))
                 for ship in player_ships:
                     if (r,c) in ship and all(coord in enemy_hits for coord in ship):
-                        current_hits.clear(); mode = "hunt"
+                        # Ship is sunk, but don't clear current_hits yet
+                        # The enhanced_target_shot_multi_ship function will filter out hits from sunk ships
+                        print(f"Expectimax: Ship sunk! But continuing target mode to check for adjacent unsunk ships. Current hits: {current_hits}")
+                        # Stay in target mode - let the multi-ship targeting handle the cleanup
             else:
                 enemy_misses.add((r,c))
             return mode
@@ -188,7 +195,10 @@ def ai_turn(ships, occupied, current_hits, enemy_hits, enemy_misses):
         enemy_hits.add((r,c)); current_hits.append((r,c))
         for ship in player_ships:
             if (r,c) in ship and all(coord in enemy_hits for coord in ship):
-                current_hits.clear(); mode = "hunt"
+                # Ship is sunk, but don't clear current_hits yet in hunt mode either
+                # The enhanced_target_shot_multi_ship function will filter out hits from sunk ships
+                print(f"Expectimax hunt mode: Ship sunk! Switching to target mode to check for adjacent unsunk ships. Current hits: {current_hits}")
+                mode = "target"  # Switch to target mode to handle potential adjacent ships
     else:
         enemy_misses.add((r,c))
     return mode
